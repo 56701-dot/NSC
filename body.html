@@ -1,0 +1,622 @@
+นี่คือโค้ดเต็มรูปแบบที่นำระบบที่เสถียรแล้ว, หน้าจอ UI แบบ Cyberpunk RPG, และระบบสลับหน้าจอ (Single Page Application) มารวมเข้าด้วยกันในไฟล์เดียวครับ
+
+ในโค้ดนี้ผมได้เพิ่ม "หน้าสรุปผลการแข่งขัน (Victory Screen)" และ "ปุ่มสำหรับกดเปลี่ยนหน้า" เข้าไปให้เรียบร้อยแล้ว เมื่อผู้เล่นเคลียร์สเตจทั้งหมด ระบบจะสลับหน้าจอไปหน้าจบเกมโดยอัตโนมัติ และสามารถกดกลับมาหน้าเมนูหลักได้โดยไม่ต้องโหลดหน้าเว็บใหม่ให้กล้องหลุดครับ
+
+คุณสามารถนำโค้ดทั้งหมดนี้ไป Copy และวางทับไฟล์เดิมได้เลยครับ:
+
+HTML
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>⚔️ Fitness RPG - Stage Quest Master</title>
+
+<style>
+  :root {
+    --bg-dark: #070b19;
+    --panel-bg: rgba(13, 22, 47, 0.75);
+    --primary: #00f0ff;
+    --success: #39ff14;
+    --accent: #ff007f;
+    --gold: #ffd700;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg-dark);
+    color: white;
+    user-select: none;
+  }
+
+  video, canvas {
+    position: absolute;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    transform: scaleX(-1);
+  }
+
+  canvas {
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  /* SCREEN SYSTEM (MENU, VICTORY, ETC.) */
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    background: radial-gradient(circle, rgba(10,20,50,0.95) 0%, rgba(5,10,25,0.99) 100%);
+    z-index: 100;
+    text-align: center;
+    backdrop-filter: blur(8px);
+    transition: opacity 0.3s ease;
+  }
+
+  .screen h1 {
+    font-size: 3.5rem;
+    margin: 0 0 10px 0;
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px var(--primary);
+  }
+
+  .screen p {
+    color: #8a9fc4;
+    font-size: 1.2rem;
+    margin: 0 0 40px 0;
+    max-width: 500px;
+    line-height: 1.6;
+  }
+
+  /* HUD GAMEPLAY PANEL */
+  .ui {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    width: 320px;
+    background: var(--panel-bg);
+    padding: 20px;
+    border-radius: 16px;
+    z-index: 50;
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+
+  .ui-section {
+    margin-bottom: 15px;
+  }
+  .ui-section:last-child { margin-bottom: 0; }
+
+  .ui-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+  }
+
+  .stat-label { color: #8a9fc4; }
+  .stat-val { font-weight: bold; color: #fff; }
+  .stage-highlight { color: var(--gold); text-shadow: 0 0 8px var(--gold); }
+
+  /* Progress Bar */
+  .progress-container {
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    height: 12px;
+    width: 100%;
+    overflow: hidden;
+    margin-top: 6px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--primary), var(--success));
+    transition: width 0.3s ease;
+    box-shadow: 0 0 10px var(--success);
+  }
+
+  /* BUTTONS */
+  button {
+    padding: 14px 28px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    letter-spacing: 1px;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+  }
+
+  .btn-main {
+    background: linear-gradient(135deg, var(--primary), #0077ff);
+    color: white;
+    font-size: 1.2rem;
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+  }
+  .btn-main:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 25px rgba(0, 240, 255, 0.7);
+  }
+
+  .btn-sub {
+    background: linear-gradient(135deg, #ff007f, #aa0055);
+    color: white;
+    font-size: 1.1rem;
+    box-shadow: 0 0 15px rgba(255, 0, 127, 0.4);
+    margin-top: 20px;
+  }
+  .btn-sub:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 25px rgba(255, 0, 127, 0.7);
+  }
+
+  .btn-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .btn-stat {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    padding: 8px 4px;
+    font-size: 0.8rem;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .btn-stat:hover:not(:disabled) {
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+    border-color: transparent;
+  }
+  .btn-stat:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  /* TOAST ALERT SYSTEM */
+  #toast {
+    position: absolute;
+    top: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: rgba(5, 25, 15, 0.9);
+    border: 2px solid var(--success);
+    color: var(--success);
+    padding: 15px 40px;
+    border-radius: 30px;
+    font-weight: bold;
+    font-size: 1.5rem;
+    z-index: 200;
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 0 20px rgba(57, 255, 20, 0.4);
+    pointer-events: none;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  #loading-msg {
+    margin-top: 15px;
+    color: var(--primary);
+    font-size: 0.9rem;
+    display: none;
+    text-shadow: 0 0 5px var(--primary);
+  }
+</style>
+</head>
+
+<body>
+
+<div id="toast">🎉 STAGE CLEAR!</div>
+
+<div id="menu-screen" class="screen">
+  <h1>⚔️ FITNESS RPG</h1>
+  <p>LEVEL UP YOUR BODY THROUGH THE CYBER QUESTS</p>
+  <button class="btn-main" id="start-btn" onclick="startGame()">ENTER THE RIFT</button>
+  <div id="loading-msg">🔮 Loading AI Vision Model... Please Wait.</div>
+</div>
+
+<div id="victory-screen" class="screen" style="display:none;">
+  <h1 style="color: var(--gold); text-shadow: 0 0 25px var(--gold);">🏆 VICTORY CLEARED!</h1>
+  <p>ยินดีด้วย! คุณได้ฝึกฝนครบทุกสเตจเควสและข้ามขีดจำกัดของร่างกายสำเร็จแล้ว! นักรบสายฟิตเนสที่แท้จริง!</p>
+  <button class="btn-sub" onclick="goToMenu()">RETURN TO MAIN MENU</button>
+</div>
+
+<div id="ui" class="ui" style="display:none;">
+  <div class="ui-section">
+    <div class="ui-row">
+      <span class="stat-label">⭐ CURRENT STAGE</span>
+      <span class="stat-val stage-highlight" id="stage">1</span>
+    </div>
+    <div class="ui-row" style="margin-top: 10px;">
+      <span class="stat-val" id="quest" style="font-size:1.1rem; color:var(--primary);">-</span>
+      <span class="stat-label" id="progress-text">0/0</span>
+    </div>
+    <div class="progress-container">
+      <div id="progress-bar" class="progress-bar"></div>
+    </div>
+  </div>
+
+  <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 15px 0;"/>
+
+  <div class="ui-section">
+    <div class="ui-row">
+      <span class="stat-label">🛡️ Hero Level</span>
+      <span class="stat-val" id="level" style="color:var(--gold)">1</span>
+    </div>
+    <div class="ui-row">
+      <span class="stat-label">✨ Experience (EXP)</span>
+      <span class="stat-val" id="exp">0</span>
+    </div>
+  </div>
+
+  <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 15px 0;"/>
+
+  <div class="ui-section">
+    <div class="ui-row">
+      <span class="stat-label">💪 Power</span>
+      <span class="stat-val" id="p" style="color:#ff4d4d">0</span>
+    </div>
+    <div class="ui-row">
+      <span class="stat-label">🦵 Endurance</span>
+      <span class="stat-val" id="e" style="color:#4da6ff">0</span>
+    </div>
+    <div class="ui-row">
+      <span class="stat-label">⚡ Speed</span>
+      <span class="stat-val" id="s" style="color:#ffb34d">0</span>
+    </div>
+    <div class="ui-row" style="margin-top:10px; background: rgba(255,215,0,0.1); padding: 6px; border-radius:6px;">
+      <span class="stat-label" style="color:var(--gold); font-weight:bold;">✨ Skill Points (SP)</span>
+      <span class="stat-val" id="sp" style="color:var(--gold)">0</span>
+    </div>
+    
+    <div class="btn-grid">
+      <button class="btn-stat" id="btn-power" onclick="up('power')">Power+</button>
+      <button class="btn-stat" id="btn-endurance" onclick="up('endurance')">Endur+</button>
+      <button class="btn-stat" id="btn-speed" onclick="up('speed')">Speed+</button>
+    </div>
+  </div>
+</div>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
+
+<script type="module">
+import {
+  PoseLandmarker,
+  FilesetResolver
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
+
+/* ================= CORE GAME STATE VARIABLES ================= */
+let pose = null;
+let ready = false;
+
+let level = 1;
+let exp = 0;
+let sp = 0;
+
+// แยกตัวแปรระบบความเคลื่อนไหวรายบุคคลเพื่อป้องกันบั๊กค้างข้ามท่าทาง
+let states = { squat: "up", pushup: "up", situp: "up" };
+let cooldowns = { squat: false, pushup: false, situp: false };
+
+let stage = 1;
+let skill = { power: 0, endurance: 0, speed: 0 };
+
+// รายชื่อด่านและเกณฑ์เป้าหมายทั้งหมดในระบบเควส
+const stages = [
+  { type: "squat", target: 8, name: "🥋 Basic Squat Training", done: 0 },
+  { type: "pushup", target: 6, name: "💥 Push Power Training", done: 0 },
+  { type: "situp", target: 10, name: "🛡️ Core Stability Training", done: 0 },
+  { type: "squat", target: 12, name: "🔥 Advanced Leg Squat", done: 0 },
+  { type: "pushup", target: 10, name: "👑 Elite Pushup Master", done: 0 }
+];
+
+/* ================= UI ELEMENTS DOM CACHE ================= */
+const menuScreen = document.getElementById("menu-screen");
+const victoryScreen = document.getElementById("victory-screen");
+const uiPanel = document.getElementById("ui");
+const startBtn = document.getElementById("start-btn");
+const loadMsg = document.getElementById("loading-msg");
+
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const st = document.getElementById("stage");
+const q = document.getElementById("quest");
+const prText = document.getElementById("progress-text");
+const prBar = document.getElementById("progress-bar");
+
+const lv = document.getElementById("level");
+const ex = document.getElementById("exp");
+
+const p = document.getElementById("p");
+const e = document.getElementById("e");
+const s = document.getElementById("s");
+const spUI = document.getElementById("sp");
+
+/* ================= SCENE NAVIGATION (ฟังก์ชันเปลี่ยนหน้า) ================= */
+window.startGame = async function() {
+  startBtn.style.display = "none";
+  loadMsg.style.display = "block";
+
+  try {
+    if (!pose) {
+      await cam();
+      await ai();
+    }
+    
+    menuScreen.style.display = "none";
+    uiPanel.style.display = "block";
+
+    // ตั้งค่าขนาดเรนเดอร์ลายเส้นตามขนาดสัญญาณวิดีโอจากกล้องจริง
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    updateStage();
+    updateButtons();
+    ready = true;
+    loop();
+  } catch (err) {
+    alert("ระบบกล้องหรือโมเดล AI เกิดข้อผิดพลาด: " + err.message);
+    startBtn.style.display = "block";
+    loadMsg.style.display = "none";
+  }
+}
+
+// ฟังก์ชันปุ่มโยงกลับหน้าหลักหลังเล่นเสร็จ (Victory Screen -> Menu Screen)
+window.goToMenu = function() {
+  victoryScreen.style.display = "none";
+  menuScreen.style.display = "flex";
+  startBtn.style.display = "block";
+  loadMsg.style.display = "none";
+  
+  // รีเซ็ตข้อมูลเกมกลับสเตจแรกใหม่เพื่อให้สามารถกดเล่นรอบถัดไปได้ทันที
+  stage = 1;
+  stages.forEach(s => s.done = 0);
+  level = 1; exp = 0; sp = 0;
+  skill = { power: 0, endurance: 0, speed: 0 };
+  
+  // อัปเดต UI ส่วนสเตตัสตัวละครให้กลับเป็นค่าเริ่มต้น
+  p.innerText = 0; e.innerText = 0; s.innerText = 0;
+  lv.innerText = 1; ex.innerText = "0 / 100"; spUI.innerText = 0;
+}
+
+/* ================= WEB HARDWARE INTERFACES ================= */
+async function cam() {
+  const stream = await navigator.mediaDevices.getUserMedia({ 
+    video: { width: { ideal: 640 }, height: { ideal: 480 } } 
+  });
+  video.srcObject = stream;
+  await new Promise(r => video.onloadedmetadata = r);
+}
+
+async function ai() {
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+  );
+  pose = await PoseLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task"
+    },
+    runningMode: "VIDEO"
+  });
+}
+
+/* ================= CORE MATHEMATICS ================= */
+function ang(a, b, c) {
+  if (!a || !b || !c) return 180; // ดักจับความปลอดภัยกรณีตรวจหาจุดอวัยวะหลุดนอกขอบจอ
+  let r = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+  let d = Math.abs(r * 180 / Math.PI);
+  return d > 180 ? 360 - d : d;
+}
+
+/* ================= QUEST AND GAME STAGE MANAGEMENT ================= */
+function updateStage() {
+  let sCurrent = stages[stage - 1];
+
+  // ถ้าไม่เจอด่านถัดไป แสดงว่าผู้เล่นทำการเคลียร์ครบถ้วนทุกด่านแล้ว
+  if (!sCurrent) {
+    uiPanel.style.display = "none";         // ซ่อนส่วนของ Gameplay
+    victoryScreen.style.display = "flex";   // โยง/เปิดสลับหน้าไปยังหน้าชัยชนะทันที!
+    ready = false;                          // หยุดฟังก์ชันวนลูปเกมไว้ชั่วคราว
+    return;
+  }
+
+  q.innerText = sCurrent.name;
+  prText.innerText = `${sCurrent.done} / ${sCurrent.target}`;
+  
+  let pct = (sCurrent.done / sCurrent.target) * 100;
+  prBar.style.width = `${Math.min(pct, 100)}%`;
+  st.innerText = stage;
+}
+
+function showToast() {
+  const toast = document.getElementById("toast");
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), 2000);
+}
+
+function addProgress(type) {
+  let sCurrent = stages[stage - 1];
+  if (!sCurrent) return;
+
+  if (sCurrent.type === type) {
+    sCurrent.done++;
+    updateStage();
+
+    if (sCurrent.done >= sCurrent.target) {
+      showToast();
+      stage++;
+      updateStage();
+    }
+  }
+}
+
+/* ================= RPG STATUS AND SYSTEM ================= */
+window.up = function(t) {
+  if (sp <= 0) return;
+
+  sp--;
+  skill[t]++;
+
+  p.innerText = skill.power;
+  e.innerText = skill.endurance;
+  s.innerText = skill.speed;
+  spUI.innerText = sp;
+  
+  updateButtons();
+}
+
+function updateButtons() {
+  const btnP = document.getElementById("btn-power");
+  const btnE = document.getElementById("btn-endurance");
+  const btnS = document.getElementById("btn-speed");
+  
+  const disable = sp <= 0;
+  btnP.disabled = disable;
+  btnE.disabled = disable;
+  btnS.disabled = disable;
+}
+
+function addExp(v) {
+  v += skill.power * 2; // สกิลพาวเวอร์มอบโบนัสค่า EXP พิเศษเพิ่มเติม
+  exp += v;
+
+  let targetExp = level * 100;
+  if (exp >= targetExp) {
+    exp -= targetExp;
+    level++;
+    sp += 2; // เลเวลอัพจะมอบแต้มสกิลให้ 2 แต้มสำหรับเลือกอัปสายพลัง
+  }
+
+  lv.innerText = level;
+  ex.innerText = `${exp} / ${level * 100}`;
+  spUI.innerText = sp;
+  updateButtons();
+}
+
+/* ================= REALTIME EXERCISE TRACKING SYSTEM ================= */
+function squat(a) {
+  if (cooldowns.squat) return;
+  if (a < (90 - skill.speed)) states.squat = "down";
+
+  if (a > 155 && states.squat === "down") {
+    states.squat = "up";
+    cooldowns.squat = true;
+    
+    let cdTime = Math.max(150, 600 - (skill.endurance * 70)); // สกิลอึดช่วยเร่งความไวคูลดาวน์ท่าทาง
+    setTimeout(() => cooldowns.squat = false, cdTime);
+
+    addExp(20);
+    addProgress("squat");
+  }
+}
+
+function pushup(a) {
+  if (cooldowns.pushup) return;
+  if (a < 95) states.pushup = "down";
+
+  if (a > 150 && states.pushup === "down") {
+    states.pushup = "up";
+    cooldowns.pushup = true;
+    
+    let cdTime = Math.max(150, 600 - (skill.endurance * 70));
+    setTimeout(() => cooldowns.pushup = false, cdTime);
+
+    addExp(15);
+    addProgress("pushup");
+  }
+}
+
+function situp(no, knee) {
+  if (!no || !knee || cooldowns.situp) return;
+  let diff = Math.abs(no.y - knee.y);
+
+  if (diff > 0.38) states.situp = "down";
+
+  if (diff < 0.22 && states.situp === "down") {
+    states.situp = "up";
+    cooldowns.situp = true;
+    
+    let cdTime = Math.max(150, 600 - (skill.endurance * 70));
+    setTimeout(() => cooldowns.situp = false, cdTime);
+
+    addExp(25);
+    addProgress("situp");
+  }
+}
+
+/* ================= GRAPHIC SKELETON WIREFRAME RENDERING ================= */
+function drawSkeleton(landmarks) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  const connections = [
+    [11, 12], [11, 23], [12, 24], [23, 24], // โครงสร้างส่วนลำตัวหลัก
+    [11, 13], [13, 15], [12, 14], [14, 16], // โครงสร้างแขนทั้งสองข้าง
+    [23, 25], [25, 27], [24, 26], [26, 28]  // โครงสร้างขาทั้งสองข้าง
+  ];
+
+  ctx.strokeStyle = "rgba(0, 240, 255, 0.6)";
+  ctx.lineWidth = 4;
+  ctx.fillStyle = "#ff007f";
+
+  connections.forEach(([i, j]) => {
+    let ptA = landmarks[i];
+    let ptB = landmarks[j];
+    if(ptA && ptB && ptA.visibility > 0.5 && ptB.visibility > 0.5) {
+      ctx.beginPath();
+      ctx.moveTo(ptA.x * canvas.width, ptA.y * canvas.height);
+      ctx.lineTo(ptB.x * canvas.width, ptB.y * canvas.height);
+      ctx.stroke();
+    }
+  });
+
+  // วาดวงกลมนีออนจุดข้อต่อหลัก
+  [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28].forEach(i => {
+    let pt = landmarks[i];
+    if(pt && pt.visibility > 0.5) {
+      ctx.beginPath();
+      ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 6, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+  });
+}
+
+/* ================= CENTRAL LOOP PROCESSOR ================= */
+function loop() {
+  if (!pose || !ready) return; // หากระบบปิดการเล่นหรือเปลี่ยนหน้าจะหยุดทำงานเพื่อประหยัดทรัพยากร
+
+  const results = pose.detectForVideo(video, performance.now());
+
+  if (results && results.landmarks && results.landmarks.length > 0) {
+    let l = results.landmarks[0];
+
+    let hip = l[23], knee = l[25], ankle = l[27];
+    let sh = l[11], el = l[13], wr = l[15];
+    let no = l[0];
+
+    if (hip && knee && ankle) squat(ang(hip, knee, ankle));
+    if (sh && el && wr) pushup(ang(sh, el, wr));
+    if (no && knee) situp(no, knee);
+
+    drawSkeleton(l);
+  } else {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  requestAnimationFrame(loop);
+}
+</script>
+
+</body>
+</html>
